@@ -1,5 +1,5 @@
 {
-  "name": "bildy",
+  "name": "@stackbilt/bildy",
   "version": "0.1.0",
   "description": "Local-first LLM gateway for Claude Code, Codex, and future agent CLIs",
   "type": "module",

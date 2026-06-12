@@ -1,4 +1,4 @@
-# @stackbilt/llm-gateway
+# @stackbilt/bildy
 
 Local-first LLM routing gateway for Claude Code, Codex, and OpenAI-compatible clients.
 
