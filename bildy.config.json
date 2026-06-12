@@ -1,0 +1,14 @@
+{
+  "routing": {
+    "shadowMode": false,
+    "experimentalModels": true,
+    "routes": {
+      "summary": ["cloudflare", "cerebras", "groq"],
+      "planning": ["cloudflare", "groq", "cerebras", "nvidia"],
+      "code_draft": ["cloudflare", "cerebras", "groq", "nvidia"],
+      "long_context": ["nvidia", "groq", "cerebras", "cloudflare"],
+      "tool_loop": ["cloudflare", "groq", "cerebras", "nvidia"],
+      "fallback_safe": ["cloudflare", "groq", "cerebras"]
+    }
+  }
+}

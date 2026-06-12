@@ -1,0 +1,11 @@
+ADF: 0.1
+
+📋 CONTEXT:
+  - Hono route composition with protocol adapters for Anthropic Messages, OpenAI Responses, OpenAI Chat
+  - Provider execution delegated through gateway provider client wrapping @stackbilt/llm-providers
+  - Local observability includes /metrics, /events/recent, /providers, and /health live snapshot
+
+⚠ CONSTRAINTS [load-bearing]:
+  - Preserve protocol adapter isolation; do not leak provider-specific response shapes into adapter contracts
+  - Keep tool-heavy routing conservative unless explicit experimental flag is enabled
+  - Maintain auth guard for all non-/health endpoints

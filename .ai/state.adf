@@ -1,0 +1,11 @@
+ADF: 0.1
+
+🧠 STATE:
+  CURRENT: Gateway scaffold complete with real @stackbilt/llm-providers integration, telemetry, metrics, and adapter test coverage
+  NEXT: Validate end-to-end against live Claude Code and Codex clients; harden error/stream compatibility fixtures
+
+📝 RECENT:
+  - Added provider client abstraction with request normalization + fallback chain capture
+  - Added /providers and /health live provider snapshot support
+  - Added integration tests for protocol endpoints, SSE streams, metrics/events, and auth behavior
+  - Enabled Charter commit-msg and pre-commit hooks

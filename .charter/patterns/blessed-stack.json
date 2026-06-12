@@ -1,0 +1,47 @@
+{
+  "customized": false,
+  "preset": "backend",
+  "generatedAt": "2026-05-05T23:27:36.905Z",
+  "patterns": [
+    {
+      "name": "Hono API Layer",
+      "category": "INTEGRATION",
+      "blessed_solution": "Hono route composition for worker/backend APIs",
+      "rationale": "Typed lightweight router aligned to edge/server runtimes",
+      "anti_patterns": "Avoid ad-hoc route registration patterns per handler file",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "Service Runtime",
+      "category": "COMPUTE",
+      "blessed_solution": "Node service runtime with typed request boundaries",
+      "rationale": "Operationally stable API execution model",
+      "anti_patterns": "Avoid implicit any/unknown request payload parsing",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "Data Access Layer",
+      "category": "DATA",
+      "blessed_solution": "Repository/service abstraction around DB operations",
+      "rationale": "Centralizes schema and migration safety",
+      "anti_patterns": "Avoid direct SQL calls spread across handlers",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "Async Jobs",
+      "category": "ASYNC",
+      "blessed_solution": "Queue-backed workers for retries and background work",
+      "rationale": "Improves resilience of non-critical tasks",
+      "anti_patterns": "Avoid blocking API requests on batch/background tasks",
+      "status": "ACTIVE"
+    },
+    {
+      "name": "API Security",
+      "category": "SECURITY",
+      "blessed_solution": "Scoped auth middleware and service-level authorization",
+      "rationale": "Consistent access control across endpoints",
+      "anti_patterns": "Avoid route-specific ad-hoc authorization logic",
+      "status": "ACTIVE"
+    }
+  ]
+}

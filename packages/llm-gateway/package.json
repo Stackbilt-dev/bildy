@@ -1,0 +1,38 @@
+{
+  "name": "bildy",
+  "version": "0.1.0",
+  "description": "Local-first LLM gateway for Claude Code, Codex, and future agent CLIs",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "bin": {
+    "bildy-gateway": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "examples"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/cli.js start",
+    "dev": "tsx src/cli.ts start",
+    "test": "npm run test:build && node --test dist-tests/tests/*.test.js dist-tests/tests/**/*.test.js",
+    "test:build": "tsc -p tsconfig.tests.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "@stackbilt/llm-providers": "^1.14.4",
+    "commander": "^13.1.0",
+    "hono": "^4.6.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

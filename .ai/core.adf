@@ -1,0 +1,27 @@
+ADF: 0.1
+
+📋 CONTEXT:
+  - project: llm-gateway-workspace
+  - StackBilt LLM Gateway provides protocol-compatible local endpoints for AI coding tools, then delegates model selectio...
+  - runtime: node
+  - stack: hono
+  - monorepo: true
+
+⚠ CONSTRAINTS [load-bearing]:
+  - Use Conventional Commits (feat, fix, docs, chore)
+  - Never commit secrets or credentials
+  - Pure functions in library code; side effects only in entry points
+  - Use .js extensions for all ESM imports (never .ts in import paths)
+
+📖 GUIDE [advisory]:
+  - Pure runtime/environment? (OS, line endings) → CLAUDE.md, not ADF
+  - Universal architecture constraint? → core.adf CONSTRAINTS [load-bearing]
+  - Stack-specific operational rule? → domain .adf module (backend.adf, frontend.adf)
+  - Agent identity/behavior? → core.adf CONTEXT
+  - Language/tooling discipline? → core.adf CONSTRAINTS or dedicated section
+  - [load-bearing] = violation causes incorrect output
+  - [advisory] = best practice, not enforced
+  - Section types are open: CONTEXT, CONSTRAINTS, ADVISORY, METRICS, custom
+
+📊 METRICS:
+  entry_loc: 0 / 500 [lines]

@@ -1,0 +1,13 @@
+ADF: 0.1
+🎯 ROLE: Repo context router
+
+📦 DEFAULT_LOAD:
+  - core.adf
+  - state.adf
+
+📂 ON_DEMAND:
+  - backend.adf (Triggers on: API, Node, DB)
+
+📐 RULES:
+  - Prefer smallest relevant module set.
+  - Never assume unseen modules were loaded.

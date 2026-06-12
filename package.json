@@ -1,0 +1,40 @@
+{
+  "name": "llm-gateway-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "setup": "npm install && bash install-global.sh && bash gateway.sh init --quick",
+    "build": "npm run -w @stackbilt/llm-gateway build",
+    "typecheck": "npm run -w @stackbilt/llm-gateway typecheck",
+    "test": "npm run -w @stackbilt/llm-gateway test",
+    "test:integration": "npm run -w @stackbilt/llm-gateway test:build && node --test packages/llm-gateway/dist-tests/tests/integration/**/*.test.js",
+    "start": "bash gateway.sh up",
+    "start:bg": "bash gateway.sh up",
+    "stop": "bash gateway.sh down",
+    "status": "bash gateway.sh status",
+    "logs": "bash gateway.sh logs",
+    "doctor": "bash gateway.sh doctor",
+    "gateway": "bash gateway.sh",
+    "claude": "bash gateway.sh claude",
+    "codex": "bash gateway.sh codex",
+    "charter:detect": "charter setup --detect-only --format json",
+    "charter:setup": "charter setup --preset backend --ci github --yes",
+    "verify:adf": "charter doctor --adf-only --ci --format json && charter adf evidence --auto-measure --ci --format json",
+    "charter:doctor": "charter doctor --format json",
+    "charter:adf:bundle": "charter adf bundle --task \"describe task\" --format json",
+    "install:global": "bash install-global.sh",
+    "uninstall:global": "bash uninstall-global.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0"
+  },
+  "devDependencies": {
+    "@stackbilt/cli": "0.12.1"
+  }
+}
