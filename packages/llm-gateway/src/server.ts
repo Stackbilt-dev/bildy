@@ -11,6 +11,7 @@ import { openAIResponsesAdapter } from "./adapters/openai-responses.js";
 import { buildResponseCacheKey } from "./cache/keys.js";
 import { FileCache } from "./cache/sqlite-cache.js";
 import { ANTHROPIC_INPUT_COST_PER_TOKEN, ANTHROPIC_OUTPUT_COST_PER_TOKEN, classifyRequest, computeShadowDecision, type ShadowDecision } from "./policy/classify.js";
+import { trimToolsForProvider } from "./policy/tool-trim.js";
 import { defaultCompatibilityRegistry, selectCompatibleProvider } from "./policy/compatibility.js";
 import {
   buildGatewayModelAliases,
@@ -449,16 +450,25 @@ async function executeRequest(params: {
   const provider = shadowMode ? "anthropic" : resolvedProvider;
   const modelOverride = shadowMode ? undefined : modelResolution.model;
 
+  // Trim tool list to the resolved provider's maximum before forwarding.
+  // Prioritizes recently-used tools from conversation history so the most
+  // relevant tools survive the cut.
+  const toolTrim = trimToolsForProvider(requestToForward, provider, params.config.routing.maxTools);
+  const requestToSend = toolTrim.trimmed > 0 ? toolTrim.request : requestToForward;
+  if (toolTrim.trimmed > 0) {
+    console.log(`[gateway] ${params.context.requestId} tool-trim: ${toolTrim.originalCount} → ${toolTrim.originalCount - toolTrim.trimmed} tools (provider=${provider} limit=${toolTrim.originalCount - toolTrim.trimmed})`);
+  }
+
   const safeResponseCacheRoute = activeRoute === "summary";
   const shouldCheckResponseCache =
     params.config.cache.enabled
     && params.config.cache.responseCache
     && safeResponseCacheRoute
-    && !requestToForward.stream
-    && (requestToForward.sampling?.temperature ?? 0) <= 0.2;
+    && !requestToSend.stream
+    && (requestToSend.sampling?.temperature ?? 0) <= 0.2;
 
   if (shouldCheckResponseCache) {
-    const responseKey = buildResponseCacheKey(requestToForward);
+    const responseKey = buildResponseCacheKey(requestToSend);
     const cachedPayload = params.cache.getResponse(responseKey);
     if (cachedPayload) {
       const cachedResponse = JSON.parse(cachedPayload) as LLMResponse;
@@ -481,11 +491,11 @@ async function executeRequest(params: {
 
   let shadow: ShadowDecision | undefined;
   if (shadowMode) {
-    shadow = computeShadowDecision(requestToForward, activeRoute, resolvedProvider);
+    shadow = computeShadowDecision(requestToSend, activeRoute, resolvedProvider);
   }
 
   const result = await routeViaProviders(
-    requestToForward,
+    requestToSend,
     activeRoute,
     provider,
     params.context.requestId,
@@ -494,7 +504,7 @@ async function executeRequest(params: {
   );
 
   if (shouldCheckResponseCache && result.response.outputText) {
-    const responseKey = buildResponseCacheKey(requestToForward);
+    const responseKey = buildResponseCacheKey(requestToSend);
     params.cache.setResponse(responseKey, JSON.stringify(result.response));
   }
 

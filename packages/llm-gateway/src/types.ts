@@ -116,6 +116,8 @@ export interface RoutingConfig {
   shadowRoutes?: Partial<Record<RouteClass, boolean>>;
   anthropicDirectProxy?: boolean;
   routes: Record<RouteClass, string[]>;
+  /** Override per-provider tool limits. Set to a number to cap all providers at that value. */
+  maxTools?: number;
 }
 
 export interface GatewayConfig {

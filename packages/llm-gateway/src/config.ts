@@ -86,6 +86,7 @@ export function resolveConfig(options?: { port?: number; cwd?: string }): Gatewa
       shadowMode: fileConfig.routing?.shadowMode ?? defaultConfig.routing.shadowMode,
       shadowRoutes: { ...defaultConfig.routing.shadowRoutes, ...fileConfig.routing?.shadowRoutes },
       anthropicDirectProxy: fileConfig.routing?.anthropicDirectProxy ?? defaultConfig.routing.anthropicDirectProxy,
+      maxTools: fileConfig.routing?.maxTools ?? defaultConfig.routing.maxTools,
     },
     cache: {
       ...defaultConfig.cache,
