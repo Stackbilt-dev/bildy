@@ -38,8 +38,8 @@ export const defaultCompatibilityRegistry: ModelCompatibility[] = [
     model: "@cf/moonshotai/kimi-k2.6",
     streaming: true,
     tools: true,
-    claudeCodeSafe: "experimental",
-    codexSafe: "experimental",
+    claudeCodeSafe: true,
+    codexSafe: true,
   },
   {
     provider: "nvidia",
