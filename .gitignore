@@ -8,3 +8,4 @@ dist-tests/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+.env

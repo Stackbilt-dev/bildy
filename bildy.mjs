@@ -3,7 +3,7 @@ import { intro, outro, select, password, text, note, spinner, isCancel, cancel }
 import { spawnSync } from 'child_process';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { realpathSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(realpathSync(fileURLToPath(import.meta.url)));
@@ -52,13 +52,75 @@ function upsertEnv(key, value) {
   writeFileSync(ENV_FILE, content, 'utf8');
 }
 
+const DIST_CLI = resolve(__dirname, 'packages/llm-gateway/dist/cli.js');
+const EVENTS_JSONL = resolve(__dirname, '.bildy/gateway/events.sqlite.jsonl');
+
 function isUp() {
   const r = spawnSync('curl', ['-sf', `${GATEWAY_URL}/health`], { timeout: 2000 });
   return r.status === 0;
 }
 
-function ensureUp() {
-  spawnSync('bash', [GATEWAY_SCRIPT, '__ensure-up'], { stdio: 'inherit' });
+function stopGateway() {
+  spawnSync('bash', [GATEWAY_SCRIPT, 'down'], { stdio: 'ignore' });
+}
+
+function ensureUp(env = {}) {
+  spawnSync('bash', [GATEWAY_SCRIPT, '__ensure-up'], {
+    stdio: 'inherit',
+    env: { ...process.env, ...env },
+  });
+}
+
+function runReport(shareMode = false) {
+  if (!existsSync(EVENTS_JSONL)) {
+    console.error('\n  No telemetry found. Start bildy, run a session, then try again.\n');
+    process.exit(1);
+  }
+  const opts = ['report', '--events', EVENTS_JSONL, ...(shareMode ? ['--share'] : [])];
+  const r = spawnSync('node', [DIST_CLI, ...opts], { stdio: 'inherit' });
+  process.exit(r.status ?? 0);
+}
+
+async function runFreeMode() {
+  process.stdout.write(BANNER);
+  intro('\x1b[36m\x1b[1mzero-dollar mode\x1b[0m  cheap routes → CF Workers AI free tier');
+
+  const wasUp = isUp();
+  if (wasUp) {
+    const s = spinner();
+    s.start('Restarting gateway in zero-dollar mode');
+    stopGateway();
+    ensureUp({ BILDY_FREE_MODE: '1' });
+    s.stop('Gateway ready  ·  planning / code_draft / summary → @cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  } else {
+    const s = spinner();
+    s.start('Starting gateway in zero-dollar mode');
+    ensureUp({ BILDY_FREE_MODE: '1' });
+    s.stop('Gateway ready  ·  ~10K CF neurons/day free tier active');
+  }
+
+  const tool = await select({
+    message: 'Launch with:',
+    options: [
+      { value: 'claude', label: 'Claude Code' },
+      { value: 'codex', label: 'Codex' },
+    ],
+  });
+  if (isCancel(tool)) { cancel(''); process.exit(0); }
+
+  outro(`launching ${tool === 'claude' ? 'Claude Code' : 'Codex'} — zero-dollar mode active`);
+
+  const env = {
+    ...process.env,
+    BILDY_FREE_MODE: '1',
+    ...(tool === 'claude'
+      ? { ANTHROPIC_BASE_URL: GATEWAY_URL, ANTHROPIC_API_KEY: KEY }
+      : { OPENAI_BASE_URL: `${GATEWAY_URL}/v1`, OPENAI_API_KEY: KEY, BILDY_GATEWAY_KEY: KEY }),
+  };
+
+  const passArgs = args.filter((a) => a !== 'free' && a !== '--free');
+  const result = spawnSync(tool, passArgs, { stdio: 'inherit', env });
+  process.exit(result.status ?? 0);
 }
 
 async function runInit() {
@@ -163,8 +225,13 @@ async function runPicker() {
 }
 
 async function main() {
-  if (args[0] === 'init') {
+  const cmd = args[0];
+  if (cmd === 'init') {
     await runInit();
+  } else if (cmd === 'report') {
+    runReport(args.includes('--share'));
+  } else if (cmd === 'free' || cmd === '--free' || args.includes('--free')) {
+    await runFreeMode();
   } else {
     await runPicker();
   }

@@ -57,7 +57,18 @@ function cachePathFromEnv(): string | undefined {
   return path.join(cacheDir, "cache.sqlite");
 }
 
-export function resolveConfig(options?: { port?: number; cwd?: string }): GatewayConfig {
+// Zero-dollar mode: disable shadow, pin cheap routes to CF Workers AI free tier.
+// Activated via BILDY_FREE_MODE=1 env var or options.freeMode.
+const FREE_MODE_ROUTES: GatewayConfig["routing"]["routes"] = {
+  tool_loop:    ["anthropic", "openai", "groq"],       // keep reliable — never send tool loops to CF alone
+  long_context: ["groq", "nvidia", "anthropic"],       // groq has 128k, cheap
+  planning:     ["cloudflare"],
+  code_draft:   ["cloudflare"],
+  summary:      ["cloudflare"],
+  fallback_safe:["cloudflare", "groq"],
+};
+
+export function resolveConfig(options?: { port?: number; cwd?: string; freeMode?: boolean }): GatewayConfig {
   const cwd = options?.cwd ?? process.cwd();
   const fileConfig = loadConfigFile(cwd);
   const envKey = process.env.BILDY_GATEWAY_KEY;
@@ -99,6 +110,13 @@ export function resolveConfig(options?: { port?: number; cwd?: string }): Gatewa
     },
     port: options?.port ?? fileConfig.port ?? defaultConfig.port,
   };
+
+  const freeMode = options?.freeMode ?? process.env.BILDY_FREE_MODE === "1";
+  if (freeMode) {
+    merged.routing.shadowMode = false;
+    merged.routing.shadowRoutes = {};
+    merged.routing.routes = { ...merged.routing.routes, ...FREE_MODE_ROUTES };
+  }
 
   return merged;
 }
