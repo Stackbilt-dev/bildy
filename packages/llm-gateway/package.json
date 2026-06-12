@@ -6,7 +6,7 @@
   "main": "dist/server.js",
   "types": "dist/server.d.ts",
   "bin": {
-    "bildy-gateway": "dist/cli.js"
+    "bildy": "dist/cli.js"
   },
   "files": [
     "dist",
