@@ -11,7 +11,7 @@ import { openAIResponsesAdapter } from "./adapters/openai-responses.js";
 import { buildResponseCacheKey } from "./cache/keys.js";
 import { FileCache } from "./cache/sqlite-cache.js";
 import { ANTHROPIC_INPUT_COST_PER_TOKEN, ANTHROPIC_OUTPUT_COST_PER_TOKEN, classifyRequest, computeShadowDecision, type ShadowDecision } from "./policy/classify.js";
-import { trimToolsForProvider } from "./policy/tool-trim.js";
+import { sanitizeToolSchemas, trimToolsForProvider } from "./policy/tool-trim.js";
 import { defaultCompatibilityRegistry, selectCompatibleProvider } from "./policy/compatibility.js";
 import {
   buildGatewayModelAliases,
@@ -450,11 +450,18 @@ async function executeRequest(params: {
   const provider = shadowMode ? "anthropic" : resolvedProvider;
   const modelOverride = shadowMode ? undefined : modelResolution.model;
 
+  // Repair broken $ref pointers in tool schemas before forwarding. Non-Anthropic
+  // providers enforce strict JSON Schema compliance; dangling refs cause hard 400s.
+  const schemaFix = sanitizeToolSchemas(requestToForward);
+  if (schemaFix.repairedTools > 0) {
+    console.log(`[gateway] ${params.context.requestId} schema-repair: fixed ${schemaFix.repairedTools} tool schema(s) (dangling $ref resolved)`);
+  }
+
   // Trim tool list to the resolved provider's maximum before forwarding.
   // Prioritizes recently-used tools from conversation history so the most
   // relevant tools survive the cut.
-  const toolTrim = trimToolsForProvider(requestToForward, provider, params.config.routing.maxTools);
-  const requestToSend = toolTrim.trimmed > 0 ? toolTrim.request : requestToForward;
+  const toolTrim = trimToolsForProvider(schemaFix.request, provider, params.config.routing.maxTools);
+  const requestToSend = toolTrim.trimmed > 0 ? toolTrim.request : schemaFix.request;
   if (toolTrim.trimmed > 0) {
     console.log(`[gateway] ${params.context.requestId} tool-trim: ${toolTrim.originalCount} → ${toolTrim.originalCount - toolTrim.trimmed} tools (provider=${provider} limit=${toolTrim.originalCount - toolTrim.trimmed})`);
   }

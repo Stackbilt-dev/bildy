@@ -75,6 +75,91 @@ export function trimToolsForProvider(
   };
 }
 
+// ─── Schema sanitization ──────────────────────────────────────────────────────
+
+// Providers outside Anthropic enforce strict JSON Schema compliance.
+// Anthropic silently tolerates schemas with dangling $ref pointers (referencing
+// $defs entries that don't exist). When we forward to CF/Groq/Cerebras those
+// schemas cause hard 400s. Repair: resolve all $refs inline; fall back to
+// { type: "object" } for dangling ones; strip $defs once resolved.
+
+type JsonSchema = Record<string, unknown>;
+
+function resolveRefs(schema: JsonSchema, defs: Record<string, JsonSchema>): JsonSchema {
+  if (typeof schema !== "object" || schema === null) return schema;
+
+  if ("$ref" in schema && typeof schema["$ref"] === "string") {
+    const ref = schema["$ref"] as string;
+    const defName = ref.startsWith("#/$defs/") ? ref.slice(8) : null;
+    if (defName && defs[defName]) {
+      // Inline the referenced definition (one level deep — no circular-ref guard needed
+      // for MCP tool schemas which are always finite trees)
+      return resolveRefs({ ...defs[defName] } as JsonSchema, defs);
+    }
+    // Dangling ref — replace with permissive object
+    return { type: "object" };
+  }
+
+  const result: JsonSchema = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === "$defs") continue; // strip after resolving
+    if (Array.isArray(v)) {
+      result[k] = v.map((item) =>
+        typeof item === "object" && item !== null ? resolveRefs(item as JsonSchema, defs) : item,
+      );
+    } else if (typeof v === "object" && v !== null) {
+      result[k] = resolveRefs(v as JsonSchema, defs);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+function sanitizeToolSchema(params: JsonSchema): JsonSchema {
+  const defs = (params["$defs"] as Record<string, JsonSchema> | undefined) ?? {};
+  return resolveRefs(params, defs);
+}
+
+export interface SanitizeResult {
+  request: LLMRequest;
+  repairedTools: number;
+}
+
+/**
+ * Sanitize tool schemas for providers that enforce strict JSON Schema compliance.
+ * Resolves $ref pointers, replaces dangling refs with { type: "object" }, strips $defs.
+ * Safe to apply to all providers — Anthropic handles the cleaned schemas fine too.
+ */
+export function sanitizeToolSchemas(request: LLMRequest): SanitizeResult {
+  if (!request.tools?.length) return { request, repairedTools: 0 };
+
+  let repairedTools = 0;
+  const tools = request.tools.map((tool) => {
+    const params = tool.function?.parameters as JsonSchema | undefined;
+    if (!params || typeof params !== "object") return tool;
+
+    const hasDanglingRef = JSON.stringify(params).includes("$ref");
+    if (!hasDanglingRef) return tool;
+
+    repairedTools++;
+    return {
+      ...tool,
+      function: {
+        ...tool.function,
+        parameters: sanitizeToolSchema(params),
+      },
+    };
+  });
+
+  return {
+    request: { ...request, tools } as LLMRequest,
+    repairedTools,
+  };
+}
+
+// ─── Message extraction ───────────────────────────────────────────────────────
+
 /**
  * Walk messages in reverse order collecting tool names from tool_use blocks.
  * Returns names in reverse-chronological order (most recently called first).
