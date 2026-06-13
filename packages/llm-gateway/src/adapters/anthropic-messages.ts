@@ -13,9 +13,11 @@ type AnthropicInputMessage = {
   content: string | AnthropicContentBlock[];
 };
 
+type AnthropicSystemBlock = { type: "text"; text?: string; cache_control?: unknown };
+
 interface AnthropicMessagesRequest {
   model?: string;
-  system?: string;
+  system?: string | AnthropicSystemBlock[];
   messages: AnthropicInputMessage[];
   max_tokens?: number;
   temperature?: number;
@@ -80,10 +82,14 @@ export const anthropicMessagesAdapter: ClientAdapter<AnthropicMessagesRequest, A
       return { role: m.role, content: normalizeContent(m.content) };
     });
 
+    const systemPrompt = Array.isArray(input.system)
+      ? input.system.filter((b) => b.type === "text").map((b) => b.text ?? "").filter(Boolean).join("\n")
+      : input.system;
+
     const request = normalizeGatewayLLMRequest({
       model: input.model,
       messages,
-      systemPrompt: input.system,
+      systemPrompt,
       maxTokens: input.max_tokens,
       temperature: input.temperature,
       tools: input.tools?.map((tool) => toCanonicalTool(tool.name, tool.description, tool.input_schema)),

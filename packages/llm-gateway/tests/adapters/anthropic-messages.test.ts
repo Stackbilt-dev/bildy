@@ -50,6 +50,25 @@ test("anthropic adapter normalizes request", () => {
   assert.equal(req.toolMode, "auto");
 });
 
+test("anthropic adapter flattens cache_control system blocks to string — prevents CF 400", () => {
+  // Claude Code sends system as content-block array when prompt caching is enabled.
+  // CF Workers AI requires system as plain string; passing an array causes 400 AiError.
+  const req = anthropicMessagesAdapter.toLLMRequest(
+    {
+      model: "claude-sonnet-4-6-20250618",
+      system: [
+        { type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } },
+        { type: "text", text: " Stay brief." },
+      ] as unknown as string,
+      messages: [{ role: "user", content: "ping" }],
+    },
+    context,
+  );
+
+  assert.equal(typeof req.system, "string", "system must be a string for non-Anthropic providers");
+  assert.equal(req.system, "You are concise.\n Stay brief.");
+});
+
 test("anthropic adapter renders response shape", () => {
   const llmResponse: LLMResponse = {
     id: "abc123",
