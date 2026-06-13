@@ -112,11 +112,17 @@ export function resolveConfig(options?: { port?: number; cwd?: string; freeMode?
   };
 
   const freeMode = options?.freeMode ?? process.env.BILDY_FREE_MODE === "1";
-  if (freeMode) {
+  const shadowOnly = process.env.BILDY_SHADOW_ONLY === "1";
+
+  if (freeMode && !shadowOnly) {
+    // Legacy proxy mode: reroute cheap classes to CF Workers AI.
+    // Disabled when BILDY_SHADOW_ONLY=1 (delegate mode).
     merged.routing.shadowMode = false;
     merged.routing.shadowRoutes = {};
     merged.routing.routes = { ...merged.routing.routes, ...FREE_MODE_ROUTES };
   }
+  // In delegate mode (freeMode + shadowOnly), keep shadowMode=true — gateway
+  // observes and logs shadow decisions but never reroutes traffic.
 
   return merged;
 }

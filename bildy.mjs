@@ -72,32 +72,36 @@ function ensureUp(env = {}) {
 }
 
 function runReport(shareMode = false) {
-  if (!existsSync(EVENTS_JSONL)) {
-    console.error('\n  No telemetry found. Start bildy, run a session, then try again.\n');
-    process.exit(1);
-  }
-  const opts = ['report', '--events', EVENTS_JSONL, ...(shareMode ? ['--share'] : [])];
+  const opts = [
+    'report',
+    '--events', EVENTS_JSONL,
+    '--delegate-log', DELEGATE_LOG,
+    ...(shareMode ? ['--share'] : []),
+  ];
   const r = spawnSync('node', [DIST_CLI, ...opts], { stdio: 'inherit' });
   process.exit(r.status ?? 0);
 }
 
+const DELEGATE_LOG = resolve(__dirname, '.bildy/delegate-log.jsonl');
+const DELEGATE_SCRIPT = resolve(
+  dirname(realpathSync(fileURLToPath(import.meta.url))),
+  '../../.claude/skills/aegis-delegate/delegate.js',
+);
+const GLOBAL_DELEGATE_SCRIPT = resolve(
+  process.env.HOME ?? '/root',
+  '.claude/skills/aegis-delegate/delegate.js',
+);
+
+function delegateScriptPath() {
+  // prefer the project-local copy, fall back to global
+  if (existsSync(DELEGATE_SCRIPT)) return DELEGATE_SCRIPT;
+  if (existsSync(GLOBAL_DELEGATE_SCRIPT)) return GLOBAL_DELEGATE_SCRIPT;
+  return null;
+}
+
 async function runFreeMode() {
   process.stdout.write(BANNER);
-  intro('\x1b[36m\x1b[1mzero-dollar mode\x1b[0m  cheap routes → CF Workers AI free tier');
-
-  const wasUp = isUp();
-  if (wasUp) {
-    const s = spinner();
-    s.start('Restarting gateway in zero-dollar mode');
-    stopGateway();
-    ensureUp({ BILDY_FREE_MODE: '1' });
-    s.stop('Gateway ready  ·  planning / code_draft / summary → @cf/meta/llama-3.3-70b-instruct-fp8-fast');
-  } else {
-    const s = spinner();
-    s.start('Starting gateway in zero-dollar mode');
-    ensureUp({ BILDY_FREE_MODE: '1' });
-    s.stop('Gateway ready  ·  ~10K CF neurons/day free tier active');
-  }
+  intro('\x1b[36m\x1b[1mzero-dollar mode\x1b[0m  explicit delegation → CF Workers AI free tier');
 
   const tool = await select({
     message: 'Launch with:',
@@ -108,18 +112,49 @@ async function runFreeMode() {
   });
   if (isCancel(tool)) { cancel(''); process.exit(0); }
 
-  outro(`launching ${tool === 'claude' ? 'Claude Code' : 'Codex'} — zero-dollar mode active`);
+  // Start gateway in shadow-only mode for telemetry (no rerouting).
+  // Claude Code talks directly to Anthropic — no format translation layer.
+  const s = spinner();
+  s.start('Starting shadow gateway for telemetry');
+  ensureUp({ BILDY_FREE_MODE: '1', BILDY_SHADOW_ONLY: '1' });
+  s.stop('Shadow gateway ready  ·  delegation log active');
+
+  note(
+    'Anthropic API is direct — no proxy interception.\n' +
+    'Cheap work is delegated explicitly via aegis-delegate.\n' +
+    'CLAUDE.md rules (>300 line reads) route to CF Workers AI free tier.',
+    'delegate mode',
+  );
+
+  outro(`launching ${tool === 'claude' ? 'Claude Code' : 'Codex'} — delegate mode active`);
 
   const env = {
     ...process.env,
     BILDY_FREE_MODE: '1',
-    ...(tool === 'claude'
-      ? { ANTHROPIC_BASE_URL: GATEWAY_URL, ANTHROPIC_API_KEY: KEY }
-      : { OPENAI_BASE_URL: `${GATEWAY_URL}/v1`, OPENAI_API_KEY: KEY, BILDY_GATEWAY_KEY: KEY }),
+    BILDY_SHADOW_ONLY: '1',
+    BILDY_DELEGATE_LOG: DELEGATE_LOG,
+    // Codex still uses the proxy for its OpenAI-compat path (not Claude Code)
+    ...(tool === 'codex'
+      ? { OPENAI_BASE_URL: `${GATEWAY_URL}/v1`, OPENAI_API_KEY: KEY, BILDY_GATEWAY_KEY: KEY }
+      : {}),
   };
 
   const passArgs = args.filter((a) => a !== 'free' && a !== '--free');
-  const result = spawnSync(tool, passArgs, { stdio: 'inherit', env });
+  const result = spawnSync(tool === 'claude' ? 'claude' : 'codex', passArgs, { stdio: 'inherit', env });
+  process.exit(result.status ?? 0);
+}
+
+async function runDelegate() {
+  const scriptPath = delegateScriptPath();
+  if (!scriptPath) {
+    console.error('\n  aegis-delegate not found. Install it at ~/.claude/skills/aegis-delegate/\n');
+    process.exit(1);
+  }
+  const delegateArgs = args.filter((a) => a !== 'delegate');
+  const result = spawnSync('node', [scriptPath, ...delegateArgs], {
+    stdio: 'inherit',
+    env: { ...process.env, BILDY_DELEGATE_LOG: DELEGATE_LOG },
+  });
   process.exit(result.status ?? 0);
 }
 
@@ -232,6 +267,8 @@ async function main() {
     runReport(args.includes('--share'));
   } else if (cmd === 'free' || cmd === '--free' || args.includes('--free')) {
     await runFreeMode();
+  } else if (cmd === 'delegate') {
+    await runDelegate();
   } else {
     await runPicker();
   }

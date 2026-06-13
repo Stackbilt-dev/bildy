@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { Command } from "commander";
 import { resolveConfig } from "./config.js";
-import { buildSavingsReport, loadEventsFromJsonl, renderCard, renderMarkdown } from "./report.js";
+import { buildDelegationStats, buildSavingsReport, loadDelegateLog, loadEventsFromJsonl, renderCard, renderMarkdown } from "./report.js";
 import { startServer } from "./server.js";
 
 const program = new Command();
@@ -53,19 +53,26 @@ program
   .description("Show savings report from shadow-mode telemetry")
   .option("--share", "Output as markdown (for copy-paste or posting)")
   .option("--events <path>", "Path to events JSONL file (default: .bildy/gateway/events.sqlite.jsonl)")
+  .option("--delegate-log <path>", "Path to delegate log JSONL (default: .bildy/delegate-log.jsonl)")
   .action((options) => {
     const config = resolveConfig();
     const defaultJsonl = path.resolve(config.telemetry.path + ".jsonl");
     const jsonlPath = options.events ? path.resolve(options.events) : defaultJsonl;
+    const delegateLogPath = options.delegateLog
+      ? path.resolve(options.delegateLog)
+      : path.resolve(".bildy/delegate-log.jsonl");
 
-    if (!existsSync(jsonlPath)) {
-      console.error(`No telemetry found at ${jsonlPath}`);
-      console.error("Start the gateway and run at least one session first.");
+    // Events file is optional in delegate mode — delegation log may be the only data source
+    const events = existsSync(jsonlPath) ? loadEventsFromJsonl(jsonlPath) : [];
+    const delegateEntries = existsSync(delegateLogPath) ? loadDelegateLog(delegateLogPath) : [];
+
+    if (events.length === 0 && delegateEntries.length === 0) {
+      console.error("No telemetry found. Start bildy, run a session, then try again.");
       process.exit(1);
     }
 
-    const events = loadEventsFromJsonl(jsonlPath);
     const report = buildSavingsReport(events);
+    report.delegation = buildDelegationStats(delegateEntries);
 
     if (options.share) {
       console.log(renderMarkdown(report));

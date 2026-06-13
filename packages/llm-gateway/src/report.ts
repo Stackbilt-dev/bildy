@@ -1,6 +1,19 @@
 import { readFileSync } from "node:fs";
 import { GatewayRequestEvent, RouteClass } from "./types.js";
 
+export interface DelegateLogEntry {
+  ts: string;
+  task: string;
+  src: string;
+  provider: string;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+  savedUsd: number;
+  latencyMs: number;
+}
+
 export interface SavingsReport {
   generatedAt: string;
   totalRequests: number;
@@ -11,6 +24,13 @@ export interface SavingsReport {
   topProvider: string | null;
   shadowModeActive: boolean;
   dateRange: { from: string; to: string } | null;
+  delegation: {
+    calls: number;
+    tokensIn: number;
+    tokensOut: number;
+    savedUsd: number;
+    byTask: Array<{ task: string; count: number; tokensIn: number }>;
+  } | null;
 }
 
 export function loadEventsFromJsonl(jsonlPath: string): GatewayRequestEvent[] {
@@ -25,6 +45,39 @@ export function loadEventsFromJsonl(jsonlPath: string): GatewayRequestEvent[] {
     try { events.push(JSON.parse(line) as GatewayRequestEvent); } catch { /* skip malformed */ }
   }
   return events;
+}
+
+export function loadDelegateLog(logPath: string): DelegateLogEntry[] {
+  let raw: string;
+  try {
+    raw = readFileSync(logPath, "utf8");
+  } catch {
+    return [];
+  }
+  const entries: DelegateLogEntry[] = [];
+  for (const line of raw.split("\n").filter(Boolean)) {
+    try { entries.push(JSON.parse(line) as DelegateLogEntry); } catch { /* skip malformed */ }
+  }
+  return entries;
+}
+
+export function buildDelegationStats(entries: DelegateLogEntry[]): SavingsReport["delegation"] {
+  if (entries.length === 0) return null;
+  const byTaskMap = new Map<string, { count: number; tokensIn: number }>();
+  let totalIn = 0, totalOut = 0, totalSaved = 0;
+  for (const e of entries) {
+    totalIn += e.tokensIn;
+    totalOut += e.tokensOut;
+    totalSaved += e.savedUsd;
+    const t = byTaskMap.get(e.task) ?? { count: 0, tokensIn: 0 };
+    t.count++;
+    t.tokensIn += e.tokensIn;
+    byTaskMap.set(e.task, t);
+  }
+  const byTask = [...byTaskMap.entries()]
+    .map(([task, v]) => ({ task, ...v }))
+    .sort((a, b) => b.tokensIn - a.tokensIn);
+  return { calls: entries.length, tokensIn: totalIn, tokensOut: totalOut, savedUsd: totalSaved, byTask };
 }
 
 export function buildSavingsReport(events: GatewayRequestEvent[]): SavingsReport {
@@ -68,6 +121,7 @@ export function buildSavingsReport(events: GatewayRequestEvent[]): SavingsReport
     topProvider,
     shadowModeActive: hasShadowMode,
     dateRange,
+    delegation: null,
   };
 }
 
@@ -134,9 +188,24 @@ export function renderCard(report: SavingsReport): string {
     rows.push(line(`  ${C.dim}top provider${C.reset}  ${C.yellow}${report.topProvider}${C.reset}`));
   }
 
-  if (report.shadowModeActive) {
+  if (report.delegation) {
+    const d = report.delegation;
+    const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
     rows.push(div);
-    rows.push(line(`  ${C.dim}shadow mode on — run ${C.reset}${C.bold}bildy free${C.reset}${C.dim} to capture savings${C.reset}`));
+    rows.push(line(`  ${C.dim}delegation (aegis-delegate)${C.reset}`));
+    rows.push(line(`  ${C.bold}${d.calls}${C.reset} calls  ·  ${C.bold}${fmtTok(d.tokensIn)}${C.reset} tokens to CF  ·  ${C.green}${C.bold}${fmtUsd(d.savedUsd)}${C.reset}${C.green} saved${C.reset}`));
+    for (const t of d.byTask.slice(0, 4)) {
+      const b = bar(t.tokensIn, Math.max(...d.byTask.map((x) => x.tokensIn), 1));
+      rows.push(line(`  ${C.blue}${pad(t.task, 10)}${C.reset}  ${C.dim}${b}${C.reset}  ${t.count}×  ${C.dim}${fmtTok(t.tokensIn)} in${C.reset}`));
+    }
+  } else if (!report.shadowModeActive) {
+    rows.push(div);
+    rows.push(line(`  ${C.dim}no delegation data — run ${C.reset}${C.bold}bildy free${C.reset}${C.dim} to track${C.reset}`));
+  }
+
+  if (report.shadowModeActive && !report.delegation) {
+    rows.push(div);
+    rows.push(line(`  ${C.dim}shadow mode on — gateway observing (no rerouting)${C.reset}`));
   }
 
   rows.push(bot);
