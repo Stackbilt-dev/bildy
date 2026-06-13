@@ -11,7 +11,7 @@ import { openAIResponsesAdapter } from "./adapters/openai-responses.js";
 import { buildResponseCacheKey } from "./cache/keys.js";
 import { FileCache } from "./cache/sqlite-cache.js";
 import { ANTHROPIC_INPUT_COST_PER_TOKEN, ANTHROPIC_OUTPUT_COST_PER_TOKEN, classifyRequest, computeShadowDecision, type ShadowDecision } from "./policy/classify.js";
-import { sanitizeToolSchemas, trimToolsForProvider } from "./policy/tool-trim.js";
+import { flattenMessageContent, sanitizeToolSchemas, trimToolsForProvider } from "./policy/tool-trim.js";
 import { defaultCompatibilityRegistry, selectCompatibleProvider } from "./policy/compatibility.js";
 import {
   buildGatewayModelAliases,
@@ -472,9 +472,21 @@ async function executeRequest(params: {
   // Prioritizes recently-used tools from conversation history so the most
   // relevant tools survive the cut.
   const toolTrim = trimToolsForProvider(schemaFix.request, provider, params.config.routing.maxTools);
-  const requestToSend = toolTrim.trimmed > 0 ? toolTrim.request : schemaFix.request;
+  const afterTrim = toolTrim.trimmed > 0 ? toolTrim.request : schemaFix.request;
   if (toolTrim.trimmed > 0) {
     console.log(`[gateway] ${params.context.requestId} tool-trim: ${toolTrim.originalCount} → ${toolTrim.originalCount - toolTrim.trimmed} tools (provider=${provider} limit=${toolTrim.originalCount - toolTrim.trimmed})`);
+  }
+
+  // CF Workers AI llama models require plain-string message content — they reject
+  // the array-of-content-blocks format that Claude Code sends. Flatten for CF
+  // (and any other provider that ended up selected for a text-only route).
+  const STRING_CONTENT_PROVIDERS = new Set(["cloudflare", "cerebras"]);
+  const contentFlatten = (STRING_CONTENT_PROVIDERS.has(provider) || TEXT_ONLY_ROUTES.has(activeRoute))
+    ? flattenMessageContent(afterTrim)
+    : { request: afterTrim, flattened: 0 };
+  const requestToSend = contentFlatten.request;
+  if (contentFlatten.flattened > 0) {
+    console.log(`[gateway] ${params.context.requestId} content-flatten: flattened ${contentFlatten.flattened} message(s) to plain strings (provider=${provider})`);
   }
 
   const safeResponseCacheRoute = activeRoute === "summary";

@@ -158,6 +158,52 @@ export function sanitizeToolSchemas(request: LLMRequest): SanitizeResult {
   };
 }
 
+// ─── Content normalization ────────────────────────────────────────────────────
+
+// CF Workers AI (and some other providers) reject array-format message content.
+// Claude Code sends content as [{type:"text",text:"..."}, ...] blocks but CF
+// requires a plain string. Flatten text blocks; drop non-text blocks (tool_use,
+// tool_result, image) which should already be stripped by the tool-strip pass.
+
+type ContentBlock = { type?: string; text?: string; name?: string };
+
+function flattenContentBlocks(blocks: ContentBlock[]): string {
+  return blocks
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("\n")
+    .trim();
+}
+
+export interface FlattenContentResult {
+  request: LLMRequest;
+  flattened: number;
+}
+
+/**
+ * Flatten array-format message content to plain strings for providers that
+ * don't support structured content blocks (CF Workers AI llama models).
+ * Safe to call on any request — string content is returned unchanged.
+ */
+export function flattenMessageContent(request: LLMRequest): FlattenContentResult {
+  let flattened = 0;
+  const messages = request.messages.map((msg) => {
+    if (typeof msg.content === "string") return msg;
+    if (!Array.isArray(msg.content)) return msg;
+
+    const text = flattenContentBlocks(msg.content as ContentBlock[]);
+    if (!text) return msg;
+
+    flattened++;
+    return { ...msg, content: text };
+  });
+
+  return {
+    request: flattened > 0 ? { ...request, messages } : request,
+    flattened,
+  };
+}
+
 // ─── Message extraction ───────────────────────────────────────────────────────
 
 /**
