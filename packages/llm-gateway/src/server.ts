@@ -287,6 +287,12 @@ function buildCapabilityDegradations(params: {
   ];
 }
 
+// Route classes where tool schemas serve no purpose — the model should only
+// return text. Sending 100+ tool schemas to these routes causes some providers
+// (e.g. CF Workers AI) to return empty responses as they attempt to pick a tool
+// call instead of generating text.
+const TEXT_ONLY_ROUTES = new Set<RouteClass>(["summary", "code_draft"]);
+
 function shouldStripTools(params: {
   activeRoute: RouteClass;
   context: GatewayRequestContext;
@@ -299,7 +305,11 @@ function shouldStripTools(params: {
   // @stackbilt/llm-providers normalizes Groq tool-call-only responses as of 1.13.1.
   if (params.context.protocol === "openai-responses") return false;
 
-  const cheapRoutes = new Set<RouteClass>(["planning", "code_draft", "summary"]);
+  // Summary and code_draft never need to call tools — strip unconditionally so
+  // cheap providers get a clean text-only request and don't return empty.
+  if (TEXT_ONLY_ROUTES.has(params.activeRoute)) return true;
+
+  const cheapRoutes = new Set<RouteClass>(["planning"]);
   if (!cheapRoutes.has(params.activeRoute) && params.activeRoute !== "tool_loop") return false;
 
   return !params.candidates.some((candidate) => {
