@@ -10,11 +10,11 @@ const toolRequest: LLMRequest = {
 };
 
 test("prefers safe provider for claude-code even when experimentalModels=true", () => {
-  // anthropic is claudeCodeSafe=true; cloudflare is claudeCodeSafe="experimental"
+  // anthropic and cloudflare are claudeCodeSafe=true; groq is claudeCodeSafe="experimental"
   // With the old bug, experimentalModels=true returned candidates[0] immediately
-  // (cloudflare, which is experimental) bypassing the anthropic safe-first preference.
+  // bypassing the safe-first preference. Safe provider should win even when experimental is allowed.
   const result = selectCompatibleProvider(
-    ["cloudflare", "anthropic"],
+    ["groq", "anthropic"],
     noToolsRequest,
     "claude-code",
     true,
@@ -34,19 +34,20 @@ test("prefers safe provider for codex even when experimentalModels=true", () => 
 });
 
 test("falls back to experimental provider for claude-code when experimentalModels=true and no safe candidate", () => {
-  // cloudflare, groq, cerebras are all claudeCodeSafe="experimental"
+  // groq and cerebras are both claudeCodeSafe="experimental" — no safe provider available
   const result = selectCompatibleProvider(
-    ["cloudflare", "groq", "cerebras"],
+    ["groq", "cerebras"],
     noToolsRequest,
     "claude-code",
     true,
   );
-  assert.ok(["cloudflare", "groq", "cerebras"].includes(result), `expected experimental provider, got ${result}`);
+  assert.ok(["groq", "cerebras"].includes(result), `expected experimental provider, got ${result}`);
 });
 
 test("does not use experimental provider for claude-code when experimentalModels=false and safe candidate exists", () => {
+  // groq is experimental, anthropic is safe — safe candidate must win regardless of order
   const result = selectCompatibleProvider(
-    ["cloudflare", "anthropic"],
+    ["groq", "anthropic"],
     noToolsRequest,
     "claude-code",
     false,

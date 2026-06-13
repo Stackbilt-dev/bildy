@@ -71,6 +71,7 @@ class MockProviderClient implements ProviderClient {
     preferredProvider: string,
     requestId: string,
     modelOverride?: string,
+    _allowedProviders?: ReadonlySet<string>,
   ): Promise<ProviderRouteResult> {
     this.calls.push({ request, routeClass, preferredProvider, requestId, modelOverride });
     if (this.options.routeError) throw this.options.routeError;
@@ -428,7 +429,8 @@ test("anthropic messages with tools route via tool-safe provider", async () => {
   assert.deepEqual(body.content[0].input, { number: 178 });
   assert.equal(body.stop_reason, "tool_use");
   assert.equal(providerClient.calls[0].routeClass, "planning");
-  assert.equal(providerClient.calls[0].preferredProvider, "groq");
+  // cloudflare is claudeCodeSafe=true and first in the default planning route
+  assert.equal(providerClient.calls[0].preferredProvider, "cloudflare");
 });
 
 test("routes inspect returns routing decision without provider execution", async () => {

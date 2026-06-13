@@ -5,19 +5,19 @@ import path from "node:path";
 import test from "node:test";
 import { resolveConfig } from "../src/config.js";
 
-test("STACKBILT_GATEWAY_CACHE_DIR overrides repo-local sqlite cache path", () => {
-  const previous = process.env.STACKBILT_GATEWAY_CACHE_DIR;
+test("BILDY_GATEWAY_CACHE_DIR overrides repo-local sqlite cache path", () => {
+  const previous = process.env.BILDY_GATEWAY_CACHE_DIR;
   const cacheDir = mkdtempSync(path.join(tmpdir(), "llm-gateway-cache-"));
-  process.env.STACKBILT_GATEWAY_CACHE_DIR = cacheDir;
+  process.env.BILDY_GATEWAY_CACHE_DIR = cacheDir;
 
   try {
     const config = resolveConfig({ cwd: mkdtempSync(path.join(tmpdir(), "llm-gateway-cwd-")) });
     assert.equal(config.cache.path, path.join(cacheDir, "cache.sqlite"));
   } finally {
     if (previous === undefined) {
-      delete process.env.STACKBILT_GATEWAY_CACHE_DIR;
+      delete process.env.BILDY_GATEWAY_CACHE_DIR;
     } else {
-      process.env.STACKBILT_GATEWAY_CACHE_DIR = previous;
+      process.env.BILDY_GATEWAY_CACHE_DIR = previous;
     }
   }
 });
