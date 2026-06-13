@@ -61,6 +61,7 @@ export interface ProviderClient {
     preferredProvider: string,
     requestId: string,
     modelOverride?: string,
+    allowedProviders?: ReadonlySet<string>,
   ): Promise<ProviderRouteResult>;
   getHealthSnapshot(options?: { live?: boolean }): Promise<ProviderHealthSnapshot>;
 }
@@ -251,6 +252,42 @@ class GatewayProviderClient implements ProviderClient {
     }
   }
 
+  // Multi-provider constrained client — fallback chain is restricted to `allowedProviders`.
+  // Keyed by sorted provider set to allow reuse across requests with the same candidate list.
+  private readonly constrainedLlms = new Map<string, LLMProvidersInstance>();
+
+  private async getConstrainedLLM(
+    allowedProviders: ReadonlySet<string>,
+    preferredProvider: ProviderName,
+  ): Promise<LLMProvidersInstance> {
+    const validProviders = new Set(
+      [...allowedProviders]
+        .map((p) => providerNameOrNull(p))
+        .filter((p): p is ProviderName => p !== null),
+    );
+    const cacheKey = [...validProviders].sort().join(",");
+    const cached = this.constrainedLlms.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const providersModule = await loadProvidersModule();
+      const llm = this.createLLM(
+        providersModule,
+        this.buildEnvForProviders(validProviders),
+        preferredProvider,
+      );
+      this.constrainedLlms.set(cacheKey, llm);
+      return llm;
+    } catch (error) {
+      const providerError = error as { message?: string };
+      throw new GatewayError(
+        providerError.message ?? `Constrained provider set [${cacheKey}] could not be initialized`,
+        "provider_init_error",
+        503,
+      );
+    }
+  }
+
   private shouldUseScopedProvider(request: LLMRequest, preferredProvider: string, modelOverride?: string): ProviderName | null {
     const providerName = providerNameOrNull(preferredProvider);
     if (!providerName) return null;
@@ -354,9 +391,18 @@ class GatewayProviderClient implements ProviderClient {
     preferredProvider: string,
     requestId: string,
     modelOverride?: string,
+    allowedProviders?: ReadonlySet<string>,
   ): Promise<ProviderRouteResult> {
     const scopedProvider = this.shouldUseScopedProvider(request, preferredProvider, modelOverride);
-    const llm = scopedProvider ? await this.getScopedLLM(scopedProvider) : await this.getLLM();
+    let llm: LLMProvidersInstance;
+    if (scopedProvider) {
+      llm = await this.getScopedLLM(scopedProvider);
+    } else if (allowedProviders && allowedProviders.size > 0) {
+      const pn = providerNameOrNull(preferredProvider);
+      llm = await this.getConstrainedLLM(allowedProviders, pn ?? "anthropic");
+    } else {
+      llm = await this.getLLM();
+    }
     const providerRequest = await this.buildProviderRequest(
       request,
       routeClass,

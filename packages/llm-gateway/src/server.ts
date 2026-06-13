@@ -101,8 +101,9 @@ async function routeViaProviders(
   requestId: string,
   providerClient: ProviderClient,
   modelOverride?: string,
+  allowedProviders?: ReadonlySet<string>,
 ): Promise<RouteOutput> {
-  const result = await providerClient.route(request, routeClass, provider, requestId, modelOverride);
+  const result = await providerClient.route(request, routeClass, provider, requestId, modelOverride, allowedProviders);
   return { ...result, response: sanitizeResponseForClient(result.response, request), routeClass };
 }
 
@@ -518,6 +519,7 @@ async function executeRequest(params: {
     params.context.requestId,
     params.providerClient,
     modelOverride,
+    new Set(candidates),
   );
 
   if (shouldCheckResponseCache && result.response.outputText) {
